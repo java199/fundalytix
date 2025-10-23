@@ -120,7 +120,6 @@ st.info(f"Loaded {len(tickers)} tickers for {index_choice}.")
 if st.button("Load Fundamentals"):
     with st.spinner("Fetching data... this may take a minute"):
         df = fetch_fundamentals(tickers, tickermap)
-        df = df[DEFAULT_COLUMNS]
         df = df.sort_values(by="Market Cap", ascending=False, ignore_index=True)
 
         # --- Filtering Controls ---
