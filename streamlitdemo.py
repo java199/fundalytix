@@ -125,12 +125,9 @@ if st.button("Load Fundamentals"):
 
         # --- Filtering Controls ---
         st.subheader("Fundamentals")
-        # Placeholder: if IBO score existed, sort; otherwise, show largest market caps
-        df_display = df.head(show_top_n)
-        df_display = df_display.drop(columns=hide_cols)
 
         # --- Table ---
-        st.dataframe(df_display, use_container_width=True)
+        st.dataframe(df, use_container_width=True)
 
         # --- Summary Stats ---
         st.caption(f"Data as of {reference_date.strftime('%Y-%m-%d')} (latest available from Yahoo Finance)")
