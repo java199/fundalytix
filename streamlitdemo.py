@@ -2,6 +2,8 @@ import streamlit as st
 import yfinance as yf
 import pandas as pd
 from datetime import date
+import requests
+from io import StringIO
 
 st.set_page_config(page_title="EquiScope Fundamentals Dashboard", layout="wide")
 
@@ -9,61 +11,80 @@ st.set_page_config(page_title="EquiScope Fundamentals Dashboard", layout="wide")
 # 📌 CONFIG
 # -------------------------------------------------------
 INDEX_OPTIONS = {
+    "NASDAQ 100": "^NDX",
     "S&P 500": "^GSPC",
-    "NASDAQ 100": "^NDX"
 }
 
 # Default columns — easy to extend later
 DEFAULT_COLUMNS = [
-    "Ticker", "Company", "Market Cap", "Index Weight",
-    "PE Ratio", "Profit Margin", "Revenue",
-    "5Y Return", "3Y Return", "1Y Return", "IBO Score"
+    "Ticker", "Company", "Market Cap",
+    "PE Ratio", "Profit Margin", "Revenue"
 ]
 
 # -------------------------------------------------------
 # 🧩 Helper Functions
 # -------------------------------------------------------
 
+
+
 @st.cache_data
 def get_index_tickers(index_name):
-    """Fetch list of tickers for an index (using Yahoo Finance)."""
-    if index_name == "S&P 500":
-        table = pd.read_html("https://en.wikipedia.org/wiki/List_of_S%26P_500_companies")[0]
-        return table["Symbol"].to_list(), table[["Symbol", "Security"]]
-    elif index_name == "NASDAQ 100":
-        table = pd.read_html("https://en.wikipedia.org/wiki/NASDAQ-100")[4]
-        return table["Ticker"].to_list(), table[["Ticker", "Company"]]
-    else:
+    """Fetch list of tickers for an index (using Wikipedia as source)."""
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+
+    try:
+        if index_name == "S&P 500":
+            url = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
+            html = requests.get(url, headers=headers).text
+            table = pd.read_html(StringIO(html))[0]
+            table.columns = [c.strip() for c in table.columns]
+            return table["Symbol"].to_list(), table[["Symbol", "Security"]]
+
+        elif index_name == "NASDAQ 100":
+            url = "https://en.wikipedia.org/wiki/NASDAQ-100"
+            html = requests.get(url, headers=headers).text
+            table = pd.read_html(StringIO(html))[4]
+            table.columns = [c.strip() for c in table.columns]
+            return table["Ticker"].to_list(), table[["Ticker", "Company"]]
+
+        else:
+            return [], pd.DataFrame()
+
+    except Exception as e:
+        st.error(f"Error fetching tickers for {index_name}: {e}")
         return [], pd.DataFrame()
 
 @st.cache_data
-def fetch_fundamentals(tickers):
-    """Fetch basic financial data from yfinance."""
+def fetch_fundamentals(tickers, tickermap, n=None):
+    """
+    Fetch key fundamentals and returns efficiently using yfinance bulk calls.
+    """
     data = []
-    for ticker in tickers:
+
+    # --- Bulk fetch for all tickers ---
+    tickers_obj = yf.Tickers(" ".join(tickers))
+
+    # --- Bulk price history (for returns) ---
+    price_hist = yf.download(tickers, period="5y", group_by="ticker", progress=False)
+
+    for i in range(len(tickers)):
         try:
-            stock = yf.Ticker(ticker)
-            info = stock.info
-            hist = stock.history(period="5y")
-
-            def total_return(period_days):
-                if len(hist) < period_days:
-                    return None
-                start = hist["Close"].iloc[-period_days]
-                end = hist["Close"].iloc[-1]
-                return (end - start) / start
-
+            symbol = tickers[i]
+            company = tickermap["Company"].iloc[i]
+            info = tickers_obj.tickers[symbol].info
+            hist = price_hist[symbol]
+            current_val = hist["Close"].iloc[-1]
             data.append({
-                "Ticker": ticker,
-                "Company": info.get("shortName", ""),
+                "Ticker": symbol,
+                "Company":company,
                 "Market Cap": info.get("marketCap", None),
                 "Index Weight": None,  # Placeholder (can add true weight later)
                 "PE Ratio": info.get("trailingPE", None),
                 "Profit Margin": info.get("profitMargins", None),
                 "Revenue": info.get("totalRevenue", None),
-                "5Y Return": total_return(252*5),
-                "3Y Return": total_return(252*3),
-                "1Y Return": total_return(252*1),
+                "5Y Return": (current_val/ hist["Close"].iloc[0] - 1) if len(hist) >= 20 else None,
+                "3Y Return": (current_val / hist["Close"].iloc[-12] - 1) if len(hist) >= 12 else None,
+                "1Y Return": (current_val / hist["Close"].iloc[-4] - 1) if len(hist) >= 4 else None,
                 "IBO Score": None  # Placeholder for custom metric
             })
         except Exception:
@@ -98,18 +119,14 @@ st.info(f"Loaded {len(tickers)} tickers for {index_choice}.")
 # --- Fetch Data Button ---
 if st.button("Load Fundamentals"):
     with st.spinner("Fetching data... this may take a minute"):
-        df = fetch_fundamentals(tickers)
-        df = df.merge(tickermap, left_on="Ticker", right_on=tickermap.columns[0], how="left")
+        df = fetch_fundamentals(tickers, tickermap)
         df = df[DEFAULT_COLUMNS]
         df = df.sort_values(by="Market Cap", ascending=False, ignore_index=True)
 
         # --- Filtering Controls ---
-        st.subheader("Table Filters")
-        show_top_n = st.number_input("Show top N by IBO Score", min_value=5, max_value=100, value=30)
+        st.subheader("Fundamentals")
         # Placeholder: if IBO score existed, sort; otherwise, show largest market caps
         df_display = df.head(show_top_n)
-
-        hide_cols = st.multiselect("Hide columns", [c for c in DEFAULT_COLUMNS if c not in ["Ticker", "Company"]])
         df_display = df_display.drop(columns=hide_cols)
 
         # --- Table ---
