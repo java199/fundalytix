@@ -20,7 +20,6 @@ st.markdown(
 # ----------------------
 # Database connection
 # ----------------------
-@st.cache_data(show_spinner=False)
 def get_engine():
     # Prefer a single URI in secrets: st.secrets['db_uri']
     # Alternatively provide host/db/user/password in secrets:
