@@ -5,3 +5,5 @@ plotly
 requests
 numpy
 lxml
+sqlalchemy
+datetime
