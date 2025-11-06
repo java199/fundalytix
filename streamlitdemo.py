@@ -1,131 +1,250 @@
 import streamlit as st
-import yfinance as yf
 import pandas as pd
-from datetime import date
-import requests
-from io import StringIO
+import numpy as np
+from sqlalchemy import create_engine, text
+from datetime import datetime, timedelta
 
-st.set_page_config(page_title="EquiScope Fundamentals Dashboard", layout="wide")
+st.set_page_config(page_title="Stocks dashboard", layout="wide")
+st.title("Stocks & Fundamentals — Reference-date metrics")
 
-# -------------------------------------------------------
-# 📌 CONFIG
-# -------------------------------------------------------
-INDEX_OPTIONS = {
-    "NASDAQ 100": "^NDX",
-    "S&P 500": "^GSPC",
-}
+st.markdown(
+    """
+    Connects to your Postgres (Supabase) and calculates performance and fundamentals metrics for all stocks
+    in your database for a user-selectable reference date.
 
-# Default columns — easy to extend later
-DEFAULT_COLUMNS = [
-    "Ticker", "Company", "Market Cap",
-    "PE Ratio", "Profit Margin", "Revenue"
-]
+    **Usage:** set the DB connection string in Streamlit secrets as `db_uri` or pass individual keys.
+    Example `db_uri`: `postgresql+psycopg2://user:password@host:port/dbname`
+    """
+)
 
-# -------------------------------------------------------
-# 🧩 Helper Functions
-# -------------------------------------------------------
-
-
-
-@st.cache_data
-def get_index_tickers(index_name):
-    """Fetch list of tickers for an index (using Wikipedia as source)."""
-    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
-
-    try:
-        if index_name == "S&P 500":
-            url = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
-            html = requests.get(url, headers=headers).text
-            table = pd.read_html(StringIO(html))[0]
-            table.columns = [c.strip() for c in table.columns]
-            return table["Symbol"].to_list(), table[["Symbol", "Security"]]
-
-        elif index_name == "NASDAQ 100":
-            url = "https://en.wikipedia.org/wiki/NASDAQ-100"
-            html = requests.get(url, headers=headers).text
-            table = pd.read_html(StringIO(html))[4]
-            table.columns = [c.strip() for c in table.columns]
-            return table["Ticker"].to_list(), table[["Ticker", "Company"]]
-
+# ----------------------
+# Database connection
+# ----------------------
+@st.cache_data(show_spinner=False)
+def get_engine():
+    # Prefer a single URI in secrets: st.secrets['db_uri']
+    # Alternatively provide host/db/user/password in secrets:
+    if "db_uri" in st.secrets:
+        uri = st.secrets["db_uri"]
+    else:
+        required = ["host", "port", "dbname", "user", "password"]
+        if all(k in st.secrets for k in required):
+            uri = (
+                f"postgresql+psycopg2://{st.secrets['user']}:{st.secrets['password']}@"
+                f"{st.secrets['host']}:{st.secrets['port']}/{st.secrets['dbname']}"
+            )
         else:
-            return [], pd.DataFrame()
+            st.error("Please set your DB connection in Streamlit secrets as `db_uri` or host/port/dbname/user/password")
+            st.stop()
+    return create_engine(uri)
 
-    except Exception as e:
-        st.error(f"Error fetching tickers for {index_name}: {e}")
-        return [], pd.DataFrame()
+engine = get_engine()
+
+# ----------------------
+# Helpers to fetch data
+# ----------------------
+@st.cache_data
+def load_stocks():
+    query = "SELECT * FROM stocks"
+    return pd.read_sql(query, engine)
 
 @st.cache_data
-def fetch_fundamentals(tickers, tickermap, n=None):
-    """
-    Fetch key fundamentals and returns efficiently using yfinance bulk calls.
-    """
-    data = []
+def load_fundamentals_upto(ref_date):
+    # We'll fetch all fundamentals with reported_date <= ref_date
+    query = text("""
+        SELECT ticker, reported_date, field, value
+        FROM fundamentals_raw
+        WHERE reported_date <= :ref_date
+        ORDER BY ticker, reported_date DESC
+    """)
+    return pd.read_sql(query, engine, params={"ref_date": ref_date})
 
-    # --- Bulk fetch for all tickers ---
-    tickers_obj = yf.Tickers(" ".join(tickers))
-
-    # --- Bulk price history (for returns) ---
-    price_hist = yf.download(tickers, period="5y", group_by="ticker", progress=False)
-
-    for i in range(len(tickers)):
-        try:
-            symbol = tickers[i]
-            company = tickermap["Company"].iloc[i]
-            info = tickers_obj.tickers[symbol].info
-            hist = price_hist[symbol]
-            current_val = hist["Close"].iloc[-1]
-            data.append({
-                "Ticker": symbol,
-                "Company":company,
-                "Market Cap": info.get("marketCap", None),
-                "Index Weight": None,  # Placeholder (can add true weight later)
-                "PE Ratio": info.get("trailingPE", None),
-                "Profit Margin": info.get("profitMargins", None),
-                "Revenue": info.get("totalRevenue", None),
-                "5Y Return": (current_val/ hist["Close"].iloc[0] - 1) if len(hist) >= 20 else None,
-                "3Y Return": (current_val / hist["Close"].iloc[-12] - 1) if len(hist) >= 12 else None,
-                "1Y Return": (current_val / hist["Close"].iloc[-4] - 1) if len(hist) >= 4 else None,
-                "IBO Score": None  # Placeholder for custom metric
-            })
-        except Exception:
-            continue
-    df = pd.DataFrame(data)
+@st.cache_data
+def load_prices_since(start_date, end_date):
+    query = text("""
+        SELECT ticker, dt, close
+        FROM prices_daily_raw
+        WHERE dt BETWEEN :start_date AND :end_date
+        ORDER BY ticker, dt
+    """)
+    df = pd.read_sql(query, engine, params={"start_date": start_date, "end_date": end_date})
+    df["dt"] = pd.to_datetime(df["dt"]).dt.date
     return df
 
-# -------------------------------------------------------
-# 🖥️ Streamlit UI
-# -------------------------------------------------------
+# ----------------------
+# Metric calculation helpers
+# ----------------------
 
-st.title("📊 Fundalytics — Index Fundamentals Dashboard")
-
-# --- Inputs ---
-col1, col2 = st.columns([1, 1])
-
-with col1:
-    index_choice = st.selectbox("Select Index", list(INDEX_OPTIONS.keys()))
-
-with col2:
-    reference_date = st.date_input(
-        "Select Reference Date (Quarter End, last 3 years)",
-        value=date.today(),
-        min_value=date(date.today().year - 3, 1, 1),
-        max_value=date.today()
+def pivot_latest_quarter(fund_df, ref_date):
+    """For each ticker select the latest reported_date <= ref_date and pivot fields wide."""
+    if fund_df.empty:
+        return pd.DataFrame()
+    # For each ticker get max reported_date
+    fund_df["reported_date"] = pd.to_datetime(fund_df["reported_date"]).dt.date
+    latest = (
+        fund_df.groupby("ticker")["reported_date"].max().reset_index().rename(columns={"reported_date": "rd"})
     )
+    merged = latest.merge(fund_df, left_on=["ticker", "rd"], right_on=["ticker", "reported_date"], how="left")
+    wide = merged.pivot(index="ticker", columns="field", values="value")
+    wide.columns.name = None
+    return wide.reset_index()
 
-tickers, tickermap = get_index_tickers(index_choice)
 
-st.info(f"Loaded {len(tickers)} tickers for {index_choice}.")
+def get_price_on_or_before(prices_df, ticker, target_date):
+    # prices_df has dt as date
+    sub = prices_df[prices_df["ticker"] == ticker]
+    sub = sub.sort_values("dt")
+    sub = sub[sub["dt"] <= target_date]
+    if sub.empty:
+        return np.nan, None
+    row = sub.iloc[-1]
+    return float(row["close"]), row["dt"]
 
-# --- Fetch Data Button ---
-if st.button("Load Fundamentals"):
-    with st.spinner("Fetching data... this may take a minute"):
-        df = fetch_fundamentals(tickers, tickermap)
 
-        # --- Filtering Controls ---
-        st.subheader("Fundamentals")
+def pct_change_from(prices_df, ticker, base_date, lookback_days):
+    base_price, base_found = get_price_on_or_before(prices_df, ticker, base_date)
+    if np.isnan(base_price):
+        return np.nan
+    target_date = base_date - timedelta(days=lookback_days)
+    tgt_price, tgt_found = get_price_on_or_before(prices_df, ticker, target_date)
+    if np.isnan(tgt_price):
+        return np.nan
+    return (base_price / tgt_price - 1) * 100
 
-        # --- Table ---
-        st.dataframe(df, use_container_width=True)
+# ----------------------
+# UI: reference date
+# ----------------------
+ref_date = st.date_input("Reference date", value=datetime.today().date())
+st.write(f"Using reference date: {ref_date}")
 
-        # --- Summary Stats ---
-        st.caption(f"Data as of {reference_date.strftime('%Y-%m-%d')} (latest available from Yahoo Finance)")
+# Load data ranges: to compute price returns up to 5y we need up to ref_date - 6y to be safe
+max_lookback_days = 365 * 6
+start_date = ref_date - timedelta(days=max_lookback_days)
+prices = load_prices_since(start_date, ref_date)
+funds = load_fundamentals_upto(ref_date)
+stocks = load_stocks()
+
+# Prepare fundamentals snapshot (latest quarter per ticker)
+funds_latest = pivot_latest_quarter(funds, ref_date)
+
+# For growth calculations we need values ~1y and ~5y prior to ref_date
+# We'll extract the latest reported_date <= ref_date - 365 and <= ref_date - 5*365
+funds["reported_date"] = pd.to_datetime(funds["reported_date"]).dt.date
+
+def snapshot_at_offset(offset_days):
+    cutoff = ref_date - timedelta(days=offset_days)
+    df = funds[funds["reported_date"] <= cutoff]
+    if df.empty:
+        return pd.DataFrame()
+    latest = (
+        df.groupby("ticker")["reported_date"].max().reset_index().rename(columns={"reported_date": "rd"})
+    )
+    merged = latest.merge(df, left_on=["ticker", "rd"], right_on=["ticker", "reported_date"], how="left")
+    wide = merged.pivot(index="ticker", columns="field", values="value")
+    wide.columns.name = None
+    return wide.reset_index()
+
+funds_1y = snapshot_at_offset(365)
+funds_5y = snapshot_at_offset(365*5)
+
+# Merge snapshots
+metrics = stocks[["ticker", "name", "sector", "industry"]].copy()
+metrics = metrics.merge(funds_latest, on="ticker", how="left")
+
+# Price-based performance columns
+perf_cols = {
+    "1M": 30,
+    "3M": 90,
+    "6M": 182,
+    "1Y": 365,
+    "5Y": 365*5,
+}
+
+for col, days in perf_cols.items():
+    metrics[col + " %"] = metrics["ticker"].apply(lambda t: pct_change_from(prices, t, ref_date, days))
+
+# Fundamentals metrics
+# Net Margin = net_income / revenue
+metrics["Net Margin"] = metrics.apply(lambda r: (r.get("net_income") / r.get("revenue") * 100)
+                                       if pd.notna(r.get("net_income")) and pd.notna(r.get("revenue")) and r.get("revenue") != 0 else np.nan, axis=1)
+
+# Revenue growth 1y and 5y
+def growth(cur, prev):
+    if pd.isna(cur) or pd.isna(prev) or prev == 0:
+        return np.nan
+    return (cur / prev - 1) * 100
+
+# bring revenue from funds_1y and funds_5y
+metrics = metrics.merge(funds_1y[["ticker", "revenue"]].rename(columns={"revenue": "revenue_1y"}), on="ticker", how="left")
+metrics = metrics.merge(funds_5y[["ticker", "revenue"]].rename(columns={"revenue": "revenue_5y"}), on="ticker", how="left")
+metrics["Revenue growth (1y) %"] = metrics.apply(lambda r: growth(r.get("revenue"), r.get("revenue_1y")), axis=1)
+metrics["Revenue growth (5y) %"] = metrics.apply(lambda r: growth(r.get("revenue"), r.get("revenue_5y")), axis=1)
+
+# Earnings growth (use net_income if available, else eps_basic)
+metrics = metrics.merge(funds_1y[["ticker", "net_income", "eps_basic"]].rename(columns={"net_income": "net_income_1y", "eps_basic": "eps_basic_1y"}), on="ticker", how="left")
+metrics = metrics.merge(funds_5y[["ticker", "net_income", "eps_basic"]].rename(columns={"net_income": "net_income_5y", "eps_basic": "eps_basic_5y"}), on="ticker", how="left")
+
+metrics["Earnings growth (1y) %"] = metrics.apply(
+    lambda r: growth(r.get("net_income"), r.get("net_income_1y")) if pd.notna(r.get("net_income")) and pd.notna(r.get("net_income_1y"))
+    else growth(r.get("eps_basic"), r.get("eps_basic_1y")), axis=1)
+metrics["Earnings growth (5y) %"] = metrics.apply(
+    lambda r: growth(r.get("net_income"), r.get("net_income_5y")) if pd.notna(r.get("net_income")) and pd.notna(r.get("net_income_5y"))
+    else growth(r.get("eps_basic"), r.get("eps_basic_5y")), axis=1)
+
+# CASH-C / DEBT-D: use cash_on_hand / long_term_debt if available (cash-to-debt)
+metrics["Cash_to_Debt"] = metrics.apply(lambda r: (r.get("cash_on_hand") / r.get("long_term_debt"))
+                                         if pd.notna(r.get("cash_on_hand")) and pd.notna(r.get("long_term_debt")) and r.get("long_term_debt") != 0 else np.nan, axis=1)
+
+# FPE (Forward P/E) -- we cannot compute analyst forward EPS; we approximate using trailing 12 months EPS if available
+# We'll compute simple Trailing P/E using price / (eps_basic * shares) approximation if eps_basic is per-share
+# Note: this is a best-effort approximation. If you have forward EPS estimates store them in fundamentals_raw and rename field 'eps_forward' etc.
+
+# get price per ticker at ref_date
+price_map = {}
+for t in metrics["ticker"]:
+    p, _ = get_price_on_or_before(prices, t, ref_date)
+    price_map[t] = p
+metrics["Price"] = metrics["ticker"].map(price_map)
+
+# Trailing EPS: eps_basic assumed to be per-share. Trailing P/E = Price / eps_basic
+metrics["FPE (approx)"] = metrics.apply(lambda r: (r.get("Price") / r.get("eps_basic")) if pd.notna(r.get("Price")) and pd.notna(r.get("eps_basic")) and r.get("eps_basic") != 0 else np.nan, axis=1)
+
+# 1Y growth % (we'll show revenue growth 1y)
+metrics["1Y growth%"] = metrics["Revenue growth (1y) %"]
+
+# Select and format columns for display
+display_cols = ["ticker", "name", "sector", "industry",
+                "1M %", "3M %", "6M %", "1Y %", "5Y %",
+                "Net Margin", "FPE (approx)", "Revenue growth (1y) %", "Revenue growth (5y) %",
+                "Earnings growth (1y) %", "Earnings growth (5y) %", "Cash_to_Debt", "1Y growth%", "Price"]
+
+out = metrics[display_cols].copy()
+# round numeric
+for c in out.columns:
+    if out[c].dtype in ["float64", "int64"]:
+        out[c] = out[c].round(2)
+
+st.write("### Metrics table")
+st.dataframe(out.set_index("ticker"), use_container_width=True)
+
+st.download_button("Download CSV", out.to_csv(index=False), file_name=f"metrics_{ref_date}.csv")
+
+st.info(
+    "Notes: IBD Rating is a proprietary metric (Investor's Business Daily) and is not available from your DB unless you store it.\n"
+    "FPE here is approximated as Price / eps_basic (trailing) if eps_basic is present. For true forward P/E you need forward EPS estimates.\n"
+    "Cash_to_Debt uses cash_on_hand / long_term_debt."
+)
+
+# small summary cards
+st.write("### Quick summary")
+col1, col2, col3 = st.columns(3)
+with col1:
+    st.metric("Universe size", len(out))
+with col2:
+    mean_1y = out["1Y %"].mean()
+    st.metric("Avg 1Y perf %", f"{mean_1y:.2f}%" if pd.notna(mean_1y) else "n/a")
+with col3:
+    avg_net_margin = out["Net Margin"].mean()
+    st.metric("Avg Net Margin %", f"{avg_net_margin:.2f}%" if pd.notna(avg_net_margin) else "n/a")
+
+st.write("Done — adjust the reference date to recompute. If you'd like additional metrics (e.g. exact Forward EPS, IBD ratings), provide those fields in fundamentals_raw or a separate table and I will wire them in.")
