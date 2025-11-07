@@ -35,8 +35,8 @@ def load_fundamentals_upto(ref_date: datetime.date) -> pd.DataFrame:
         .table("fundamentals_raw")
         .select("ticker,reported_date,field,value")
         .lte("reported_date", ref_date_str)
-        .order("ticker", asc=True)
-        .order("reported_date", asc=True)  # descending per ticker
+        .order("ticker")
+        .order("reported_date")  # descending per ticker
         .execute()
     )
     return resp
@@ -51,8 +51,8 @@ def load_prices_since(start_date: datetime.date, end_date: datetime.date) -> pd.
         .select("ticker,dt,close")
         .gte("dt", start_date_str)
         .lte("dt", end_date_str)
-        .order("ticker", asc=True)
-        .order("dt", asc=True)
+        .order("ticker")
+        .order("dt")
         .execute()
     )
     return resp
