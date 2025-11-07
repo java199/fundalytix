@@ -18,24 +18,26 @@ def load_stocks():
     return execute_query(conn.table("stocks").select("*"))
 
 def load_fundamentals_upto(ref_date):
-    # We'll fetch all fundamentals with reported_date <= ref_date
-    query = text("""
+    # Run SQL query
+    query = """
         SELECT ticker, reported_date, field, value
         FROM fundamentals_raw
-        WHERE reported_date <= :ref_date
+        WHERE reported_date <= %(ref_date)s
         ORDER BY ticker, reported_date DESC
-    """)
+    """
 
-    return execute_query(conn.table("fundamentals_raw").select("ticker, reported_date, field, value").filter(text("reported_date <= :ref_date")).params(ref_date=ref_date))
+    # Fetch data
+    data = conn.query(query, params={"ref_date": ref_date}).to_pandas()
+    return data
 
 def load_prices_since(start_date, end_date):
     query = text("""
         SELECT ticker, dt, close
         FROM prices_daily_raw
-        WHERE dt BETWEEN :start_date AND :end_date
+        WHERE dt BETWEEN %(start_date)s AND %(end_date)s
         ORDER BY ticker, dt
     """)
-    df = execute_query(conn.table("prices_daily_raw").select("ticker, dt, close").filter(text("dt BETWEEN :start_date AND :end_date")).params(start_date=start_date, end_date=end_date))
+    df = conn.query(query, params={"start_date": start_date, "end_date": end_date}).to_pandas()
     df["dt"] = pd.to_datetime(df["dt"]).dt.date
     return df
 
