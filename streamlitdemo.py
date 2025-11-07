@@ -1,9 +1,7 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-from sqlalchemy import create_engine, text
 from datetime import datetime, timedelta
-from st_supabase_connection import SupabaseConnection, execute_query
 from supabase import create_client
 
 st.set_page_config(page_title="Fundalytix", layout="wide")
@@ -65,33 +63,7 @@ for row in rows.data:
     st.write(f"{row['ticker']} means :{row['name']}:")
 
 fundamentals = load_fundamentals_upto(datetime.today().date())
-st.write(f"Loaded {len(fundamentals)} fundamentals records.")
-
 prices = load_prices_since(datetime.today().date() - timedelta(days=2), datetime.today().date())
-st.write(f"Loaded {len(prices)} price records.")
-
-
-# ----------------------
-# Database connection
-# ----------------------
-# def get_engine():
-#     # Prefer a single URI in secrets: st.secrets['db_uri']
-#     # Alternatively provide host/db/user/password in secrets:
-#     if "db_uri" in st.secrets:
-#         uri = st.secrets["db_uri"]
-#     else:
-#         required = ["host", "port", "dbname", "user", "password"]
-#         if all(k in st.secrets for k in required):
-#             uri = (
-#                 f"postgresql+psycopg2://{st.secrets['user']}:{st.secrets['password']}@"
-#                 f"{st.secrets['host']}:{st.secrets['port']}/{st.secrets['dbname']}"
-#             )
-#         else:
-#             st.error("Please set your DB connection in Streamlit secrets as `db_uri` or host/port/dbname/user/password")
-#             st.stop()
-#     return create_engine(uri)
-
-# engine = get_engine()
 
 
 

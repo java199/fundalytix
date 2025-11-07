@@ -209,3 +209,4 @@ __marimo__/
 #custom
 data/
 pgdata/
+.streamlit/
