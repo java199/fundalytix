@@ -22,7 +22,7 @@ supabase = create_client(url, key)
 # ----------------------
 def load_stocks():
     resp = supabase.table("stocks").select("*").execute()
-    return pd.DataFrame(resp.data or [])
+    return resp
 
 @st.cache_data(ttl=300)  # cache for 5 minutes
 def load_fundamentals_upto(ref_date: datetime.date) -> pd.DataFrame:
@@ -39,8 +39,7 @@ def load_fundamentals_upto(ref_date: datetime.date) -> pd.DataFrame:
         .order("reported_date", {"ascending": False})  # descending per ticker
         .execute()
     )
-    data = resp.data or []
-    return pd.DataFrame(data)
+    return resp
 
 def load_prices_since(start_date: datetime.date, end_date: datetime.date) -> pd.DataFrame:
     # supabase expects ISO date strings for filtering
@@ -56,9 +55,7 @@ def load_prices_since(start_date: datetime.date, end_date: datetime.date) -> pd.
         .order("dt", {"ascending": True})
         .execute()
     )
-
-    data = resp.data or []
-    return pd.DataFrame(data)
+    return resp
 
 
 # Perform query.
