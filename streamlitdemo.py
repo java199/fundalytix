@@ -4,42 +4,69 @@ import numpy as np
 from sqlalchemy import create_engine, text
 from datetime import datetime, timedelta
 from st_supabase_connection import SupabaseConnection, execute_query
+from supabase import create_client
 
 st.set_page_config(page_title="Fundalytix", layout="wide")
 st.title("Stocks & Fundamentals — Reference-date metrics")
 
-# Initialize connection.
-conn = st.connection("supabase",type=SupabaseConnection)
+# ----------------------
+# read secrets
+url = st.secrets["supabase"]["url"]
+key = st.secrets["supabase"]["service_key"]
+
+# create supabase client
+supabase = create_client(url, key)
 
 # ----------------------
 # Helpers to fetch data
 # ----------------------
 def load_stocks():
-    return execute_query(conn.table("stocks").select("*"))
+    resp = supabase.table("stocks").select("*").execute()
+    if resp.status_code != 200:
+        raise RuntimeError(f"Supabase request failed: {resp.status_code} {resp.error}")
+    return pd.DataFrame(resp.data or [])
 
-def load_fundamentals_upto(ref_date):
-    # Run SQL query
-    query = """
-        SELECT ticker, reported_date, field, value
-        FROM fundamentals_raw
-        WHERE reported_date <= %(ref_date)s
-        ORDER BY ticker, reported_date DESC
-    """
+@st.cache_data(ttl=300)  # cache for 5 minutes
+def load_fundamentals_upto(ref_date: date):
+    # supabase expects ISO date strings for filtering
+    ref_date_str = ref_date.isoformat()
 
-    # Fetch data
-    data = conn.query(query, params={"ref_date": ref_date}).to_pandas()
-    return data
+    # PostgREST-style query: select, filter reported_date <= ref_date, order
+    resp = (
+        supabase
+        .table("fundamentals_raw")
+        .select("ticker,reported_date,field,value")
+        .lte("reported_date", ref_date_str)
+        .order("ticker", {"ascending": True})
+        .order("reported_date", {"ascending": False})  # descending per ticker
+        .execute()
+    )
+
+    if resp.status_code not in (200, 206):
+        # handle errors
+        raise RuntimeError(f"Supabase request failed: {resp.status_code} {resp.error}")
+
+    data = resp.data or []
+    return pd.DataFrame(data)
 
 def load_prices_since(start_date, end_date):
-    query = text("""
-        SELECT ticker, dt, close
-        FROM prices_daily_raw
-        WHERE dt BETWEEN %(start_date)s AND %(end_date)s
-        ORDER BY ticker, dt
-    """)
-    df = conn.query(query, params={"start_date": start_date, "end_date": end_date}).to_pandas()
-    df["dt"] = pd.to_datetime(df["dt"]).dt.date
-    return df
+    resp = (
+        supabase
+        .table("prices_daily_raw")
+        .select("ticker,dt,close")
+        .gte("dt", start_date)
+        .lte("dt", end_date)
+        .order("ticker", {"ascending": True})
+        .order("dt", {"ascending": True})
+        .execute()
+    )
+
+    if resp.status_code not in (200, 206):
+        # handle errors
+        raise RuntimeError(f"Supabase request failed: {resp.status_code} {resp.error}")
+
+    data = resp.data or []
+    return pd.DataFrame(data)
 
 
 # Perform query.
