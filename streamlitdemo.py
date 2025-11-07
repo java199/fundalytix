@@ -14,11 +14,9 @@ conn = st.connection("supabase",type=SupabaseConnection)
 # ----------------------
 # Helpers to fetch data
 # ----------------------
-@st.cache_data
 def load_stocks():
     return execute_query(conn.table("stocks").select("*"))
 
-@st.cache_data
 def load_fundamentals_upto(ref_date):
     # We'll fetch all fundamentals with reported_date <= ref_date
     query = text("""
@@ -30,7 +28,6 @@ def load_fundamentals_upto(ref_date):
 
     return execute_query(conn.table("fundamentals_raw").select("ticker, reported_date, field, value").filter(text("reported_date <= :ref_date")).params(ref_date=ref_date))
 
-@st.cache_data
 def load_prices_since(start_date, end_date):
     query = text("""
         SELECT ticker, dt, close
