@@ -12,7 +12,7 @@ st.title("Stocks & Fundamentals — Reference-date metrics")
 conn = st.connection("supabase",type=SupabaseConnection)
 
 # Perform query.
-rows = execute_query(conn.table("stocks").select("*").execute())
+rows = execute_query(conn.table("stocks").select("*"))
 # Print results.
 for row in rows.data:
     st.write(f"{row['ticker']} means :{row['name']}:")
