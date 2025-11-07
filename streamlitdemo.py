@@ -11,8 +11,8 @@ st.title("Stocks & Fundamentals — Reference-date metrics")
 
 # ----------------------
 # read secrets
-url = st.secrets["supabase"]["url"]
-key = st.secrets["supabase"]["service_key"]
+url = st.secrets["SUPABASE_URL"]
+key = st.secrets["SUPABASE_KEY"]
 
 # create supabase client
 supabase = create_client(url, key)
