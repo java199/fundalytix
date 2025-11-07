@@ -27,7 +27,7 @@ def load_stocks():
     return pd.DataFrame(resp.data or [])
 
 @st.cache_data(ttl=300)  # cache for 5 minutes
-def load_fundamentals_upto(ref_date: date):
+def load_fundamentals_upto(ref_date: datetime.date) -> pd.DataFrame:
     # supabase expects ISO date strings for filtering
     ref_date_str = ref_date.isoformat()
 
@@ -49,13 +49,16 @@ def load_fundamentals_upto(ref_date: date):
     data = resp.data or []
     return pd.DataFrame(data)
 
-def load_prices_since(start_date, end_date):
+def load_prices_since(start_date: datetime.date, end_date: datetime.date) -> pd.DataFrame:
+    # supabase expects ISO date strings for filtering
+    start_date_str = start_date.isoformat()
+    end_date_str = end_date.isoformat()
     resp = (
         supabase
         .table("prices_daily_raw")
         .select("ticker,dt,close")
-        .gte("dt", start_date)
-        .lte("dt", end_date)
+        .gte("dt", start_date_str)
+        .lte("dt", end_date_str)
         .order("ticker", {"ascending": True})
         .order("dt", {"ascending": True})
         .execute()
