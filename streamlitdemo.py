@@ -22,8 +22,6 @@ supabase = create_client(url, key)
 # ----------------------
 def load_stocks():
     resp = supabase.table("stocks").select("*").execute()
-    if resp.status_code != 200:
-        raise RuntimeError(f"Supabase request failed: {resp.status_code} {resp.error}")
     return pd.DataFrame(resp.data or [])
 
 @st.cache_data(ttl=300)  # cache for 5 minutes
@@ -41,11 +39,6 @@ def load_fundamentals_upto(ref_date: datetime.date) -> pd.DataFrame:
         .order("reported_date", {"ascending": False})  # descending per ticker
         .execute()
     )
-
-    if resp.status_code not in (200, 206):
-        # handle errors
-        raise RuntimeError(f"Supabase request failed: {resp.status_code} {resp.error}")
-
     data = resp.data or []
     return pd.DataFrame(data)
 
@@ -63,10 +56,6 @@ def load_prices_since(start_date: datetime.date, end_date: datetime.date) -> pd.
         .order("dt", {"ascending": True})
         .execute()
     )
-
-    if resp.status_code not in (200, 206):
-        # handle errors
-        raise RuntimeError(f"Supabase request failed: {resp.status_code} {resp.error}")
 
     data = resp.data or []
     return pd.DataFrame(data)
