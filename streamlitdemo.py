@@ -73,7 +73,7 @@ def load_prices_since(start_date: datetime.date, end_date: datetime.date) -> pd.
 
 
 # Perform query.
-rows = execute_query(conn.table("stocks").select("*"))
+rows = load_stocks()
 # Print results.
 for row in rows.data:
     st.write(f"{row['ticker']} means :{row['name']}:")
