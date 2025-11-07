@@ -3,7 +3,7 @@ import pandas as pd
 import numpy as np
 from sqlalchemy import create_engine, text
 from datetime import datetime, timedelta
-from st_supabase_connection import SupabaseConnection
+from st_supabase_connection import SupabaseConnection, execute_query
 
 st.set_page_config(page_title="Fundalytix", layout="wide")
 st.title("Stocks & Fundamentals — Reference-date metrics")
@@ -12,11 +12,11 @@ st.title("Stocks & Fundamentals — Reference-date metrics")
 conn = st.connection("supabase",type=SupabaseConnection)
 
 # Perform query.
-rows = conn.query("*", table="stocks").execute()
+rows = execute_query(conn.table("stocks").select("*").execute())
 # Print results.
 for row in rows.data:
     st.write(f"{row['ticker']} means :{row['name']}:")
-    
+
 # ----------------------
 # Database connection
 # ----------------------
