@@ -20,7 +20,7 @@ supabase = create_client(url, key)
 # ----------------------
 def load_stocks():
     resp = supabase.table("stocks").select("*").execute()
-    return resp
+    return resp.data
 
 @st.cache_data(ttl=300)  # cache for 5 minutes
 def load_fundamentals_upto(ref_date: datetime.date) -> pd.DataFrame:
@@ -37,7 +37,7 @@ def load_fundamentals_upto(ref_date: datetime.date) -> pd.DataFrame:
         .order("reported_date")  # descending per ticker
         .execute()
     )
-    return resp
+    return resp.data
 
 def load_prices_since(start_date: datetime.date, end_date: datetime.date) -> pd.DataFrame:
     # supabase expects ISO date strings for filtering
@@ -53,13 +53,13 @@ def load_prices_since(start_date: datetime.date, end_date: datetime.date) -> pd.
         .order("dt")
         .execute()
     )
-    return resp
+    return resp.data
 
 
 # Perform query.
 rows = load_stocks()
 # Print results.
-for row in rows.data:
+for row in rows:
     st.write(f"{row['ticker']} means :{row['name']}:")
 
 fundamentals = load_fundamentals_upto(datetime.today().date())
@@ -73,7 +73,7 @@ prices = load_prices_since(datetime.today().date() - timedelta(days=2), datetime
 
 def pivot_latest_quarter(fund_df, ref_date):
     """For each ticker select the latest reported_date <= ref_date and pivot fields wide."""
-    if fund_df.empty:
+    if len(fund_df)==0:
         return pd.DataFrame()
     # For each ticker get max reported_date
     fund_df["reported_date"] = pd.to_datetime(fund_df["reported_date"]).dt.date
