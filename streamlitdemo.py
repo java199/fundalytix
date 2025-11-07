@@ -3,49 +3,48 @@ import pandas as pd
 import numpy as np
 from sqlalchemy import create_engine, text
 from datetime import datetime, timedelta
+from st_supabase_connection import SupabaseConnection
 
-st.set_page_config(page_title="Stocks dashboard", layout="wide")
+st.set_page_config(page_title="Fundalytix", layout="wide")
 st.title("Stocks & Fundamentals — Reference-date metrics")
 
-st.markdown(
-    """
-    Connects to your Postgres (Supabase) and calculates performance and fundamentals metrics for all stocks
-    in your database for a user-selectable reference date.
+# Initialize connection.
+conn = st.connection("supabase",type=SupabaseConnection)
 
-    **Usage:** set the DB connection string in Streamlit secrets as `db_uri` or pass individual keys.
-    Example `db_uri`: `postgresql+psycopg2://user:password@host:port/dbname`
-    """
-)
-
+# Perform query.
+rows = conn.query("*", table="stocks").execute()
+# Print results.
+for row in rows.data:
+    st.write(f"{row['ticker']} means :{row['name']}:")
+    
 # ----------------------
 # Database connection
 # ----------------------
-def get_engine():
-    # Prefer a single URI in secrets: st.secrets['db_uri']
-    # Alternatively provide host/db/user/password in secrets:
-    if "db_uri" in st.secrets:
-        uri = st.secrets["db_uri"]
-    else:
-        required = ["host", "port", "dbname", "user", "password"]
-        if all(k in st.secrets for k in required):
-            uri = (
-                f"postgresql+psycopg2://{st.secrets['user']}:{st.secrets['password']}@"
-                f"{st.secrets['host']}:{st.secrets['port']}/{st.secrets['dbname']}"
-            )
-        else:
-            st.error("Please set your DB connection in Streamlit secrets as `db_uri` or host/port/dbname/user/password")
-            st.stop()
-    return create_engine(uri)
+# def get_engine():
+#     # Prefer a single URI in secrets: st.secrets['db_uri']
+#     # Alternatively provide host/db/user/password in secrets:
+#     if "db_uri" in st.secrets:
+#         uri = st.secrets["db_uri"]
+#     else:
+#         required = ["host", "port", "dbname", "user", "password"]
+#         if all(k in st.secrets for k in required):
+#             uri = (
+#                 f"postgresql+psycopg2://{st.secrets['user']}:{st.secrets['password']}@"
+#                 f"{st.secrets['host']}:{st.secrets['port']}/{st.secrets['dbname']}"
+#             )
+#         else:
+#             st.error("Please set your DB connection in Streamlit secrets as `db_uri` or host/port/dbname/user/password")
+#             st.stop()
+#     return create_engine(uri)
 
-engine = get_engine()
+# engine = get_engine()
 
 # ----------------------
 # Helpers to fetch data
 # ----------------------
 @st.cache_data
 def load_stocks():
-    query = "SELECT * FROM stocks"
-    return pd.read_sql(query, engine)
+    return conn.query("*", table="stocks").execute()
 
 @st.cache_data
 def load_fundamentals_upto(ref_date):
