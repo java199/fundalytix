@@ -11,11 +11,50 @@ st.title("Stocks & Fundamentals — Reference-date metrics")
 # Initialize connection.
 conn = st.connection("supabase",type=SupabaseConnection)
 
+# ----------------------
+# Helpers to fetch data
+# ----------------------
+@st.cache_data
+def load_stocks():
+    return execute_query(conn.table("stocks").select("*"))
+
+@st.cache_data
+def load_fundamentals_upto(ref_date):
+    # We'll fetch all fundamentals with reported_date <= ref_date
+    query = text("""
+        SELECT ticker, reported_date, field, value
+        FROM fundamentals_raw
+        WHERE reported_date <= :ref_date
+        ORDER BY ticker, reported_date DESC
+    """)
+
+    return execute_query(conn.table("fundamentals_raw").select("ticker, reported_date, field, value").filter(text("reported_date <= :ref_date")).params(ref_date=ref_date))
+
+@st.cache_data
+def load_prices_since(start_date, end_date):
+    query = text("""
+        SELECT ticker, dt, close
+        FROM prices_daily_raw
+        WHERE dt BETWEEN :start_date AND :end_date
+        ORDER BY ticker, dt
+    """)
+    df = execute_query(conn.table("prices_daily_raw").select("ticker, dt, close").filter(text("dt BETWEEN :start_date AND :end_date")).params(start_date=start_date, end_date=end_date))
+    df["dt"] = pd.to_datetime(df["dt"]).dt.date
+    return df
+
+
 # Perform query.
 rows = execute_query(conn.table("stocks").select("*"))
 # Print results.
 for row in rows.data:
     st.write(f"{row['ticker']} means :{row['name']}:")
+
+fundamentals = load_fundamentals_upto(datetime.today().date())
+st.write(f"Loaded {len(fundamentals)} fundamentals records.")
+
+prices = load_prices_since(datetime.today().date() - timedelta(days=2), datetime.today().date())
+st.write(f"Loaded {len(prices)} price records.")
+
 
 # ----------------------
 # Database connection
@@ -39,35 +78,7 @@ for row in rows.data:
 
 # engine = get_engine()
 
-# ----------------------
-# Helpers to fetch data
-# ----------------------
-@st.cache_data
-def load_stocks():
-    return conn.query("*", table="stocks").execute()
 
-@st.cache_data
-def load_fundamentals_upto(ref_date):
-    # We'll fetch all fundamentals with reported_date <= ref_date
-    query = text("""
-        SELECT ticker, reported_date, field, value
-        FROM fundamentals_raw
-        WHERE reported_date <= :ref_date
-        ORDER BY ticker, reported_date DESC
-    """)
-    return pd.read_sql(query, engine, params={"ref_date": ref_date})
-
-@st.cache_data
-def load_prices_since(start_date, end_date):
-    query = text("""
-        SELECT ticker, dt, close
-        FROM prices_daily_raw
-        WHERE dt BETWEEN :start_date AND :end_date
-        ORDER BY ticker, dt
-    """)
-    df = pd.read_sql(query, engine, params={"start_date": start_date, "end_date": end_date})
-    df["dt"] = pd.to_datetime(df["dt"]).dt.date
-    return df
 
 # ----------------------
 # Metric calculation helpers
