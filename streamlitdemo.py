@@ -34,10 +34,11 @@ def get_index_list(ref_date: str, index_name) -> pd.DataFrame:
         .eq("index", index_name)
         .gte("included_start", ref_date)
         .lte("included_end", ref_date)
-        .distinct()
         .execute()
     )
-    return pd.DataFrame(resp.data)
+    df = pd.DataFrame(resp.data)
+    df = df.drop_duplicates(subset=["ticker"])
+    return df
 
 @st.cache_data(ttl=300)  # cache for 5 minutes
 def load_fundamentals_for_date(ref_date, index_name) -> pd.DataFrame:
