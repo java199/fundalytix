@@ -129,7 +129,7 @@ if st.button("Load Fundamentals"):
 
         # --- Display Individual Stocks ---
         st.subheader("Individual Stock Fundamentals")
-        st.dataframe(df_display.style.format("{:.2f}x"))
+        st.dataframe(df_display, use_container_width=True)
 
         # --- Compute Index Average ---
         avg_row = df_display.mean(numeric_only=True).to_frame().T
