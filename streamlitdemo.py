@@ -89,17 +89,17 @@ with col2:
 st.write(f"Using reference date: {ref_date}")
 
 # --- Fetch Data Button ---
-# if st.button("Load Fundamentals"):
-#     with st.spinner("Fetching data... this may take a minute"):
-ref_date = "2025-09-30"
-index_choice = "S&P 500"
-df = load_fundamentals_for_date(ref_date, index_choice)
+if st.button("Load Fundamentals"):
+    with st.spinner("Fetching data... this may take a minute"):
+        #ref_date = "2025-09-30"
+        #index_choice = "S&P 500"
+        df = load_fundamentals_for_date(ref_date, index_choice)
 
-# --- Filtering Controls ---
-st.subheader("Fundamentals")
+        # --- Filtering Controls ---
+        st.subheader("Fundamentals")
 
-# --- Table ---
-st.dataframe(df, use_container_width=True)
+        # --- Table ---
+        st.dataframe(df)
 
-# --- Summary Stats ---
-st.caption(f"Data as of {ref_date} (latest available from Yahoo Finance)")
+        # --- Summary Stats ---
+        st.caption(f"Data as of {ref_date} (latest available from Yahoo Finance)")
