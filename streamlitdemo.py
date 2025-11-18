@@ -76,7 +76,7 @@ def load_fundamentals_available_dates():
 # -------------------------------------------------------
 st.title("📊 Fundalytics — Index Fundamentals Dashboard")
 
-available_dates = load_fundamentals_available_dates()
+available_dates = ["2025-09-30","2025-06-30", "2025-03-31", "2024-12-31", "2024-09-30", "2024-06-30"]
 
 # --- Inputs ---
 col1, col2 = st.columns([1, 1])
