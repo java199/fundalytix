@@ -98,17 +98,16 @@ if st.button("Load Fundamentals"):
 
         # Rename columns
         df_display.rename(columns={
-            "perf_1m": "1M Perf",
-            "perf_3m": "3M Perf",
-            "perf_6m": "6M Perf",
-            "perf_1y": "1Y Perf",
-            "perf_3y": "3Y Perf",
-            "perf_5y": "5Y Perf",
-            "rev_earnings": "Revenue / Earnings",
-            "revenue_1y": "Revenue 1Y",
-            "revenue_5y": "Revenue 5Y",
-            "earning_1y": "Earnings 1Y",
-            "earning_5y": "Earnings 5Y",
+            "perf_1m": "1M Perf (%)",
+            "perf_3m": "3M Perf (%)",
+            "perf_6m": "6M Perf (%)",
+            "perf_1y": "1Y Perf (%)",
+            "perf_3y": "3Y Perf (%)",
+            "perf_5y": "5Y Perf (%)",
+            "revenue_1y": "Revenue 1Y (X)",
+            "revenue_5y": "Revenue 5Y (X)",
+            "earning_1y": "Earnings 1Y (X)",
+            "earning_5y": "Earnings 5Y (X)",
             "net_margin": "Net Margin",
             "cash_to_dept": "Cash/Dept",
             "growth_1y": "Growth 1Y",
@@ -125,7 +124,7 @@ if st.button("Load Fundamentals"):
             df_display[col] = (df_display[col] * 100).round(2) / 100  # e.g., 1.25 → 1.25x
 
         # Hide unwanted columns
-        df_display.drop(columns=["fpe", "ibd_score", "dt"], inplace=True, errors='ignore')
+        df_display.drop(columns=["fpe", "ibd_score", "dt", "rev_earnings"], inplace=True, errors='ignore')
 
         # --- Display Individual Stocks ---
         st.subheader("Individual Stock Fundamentals")
@@ -138,23 +137,30 @@ if st.button("Load Fundamentals"):
         # Append index average row
         df_avg_display = pd.concat([df_display, avg_row], ignore_index=True)
 
-        # --- Color scale function ---
-        def color_scale(val, col_mean):
-            if val < col_mean:
-                # interpolate red to white
-                intensity = min(1, abs(val - col_mean) / col_mean)
-                return f"background-color: rgba(255, 0, 0, {intensity})"
-            elif val > col_mean:
-                # interpolate white to green
-                intensity = min(1, abs(val - col_mean) / col_mean)
-                return f"background-color: rgba(0, 255, 0, {intensity})"
+        # Identify numeric columns
+        numeric_cols = df_avg_display.select_dtypes(include=np.number).columns
+
+        # Format only numeric columns in X-notation
+        styled_df = df_avg_display.style.format({col: "{:.2f}x" for col in numeric_cols})
+
+        # Function to color cells relative to column mean
+        means = df_display.mean(numeric_only=True)
+        def color_cells(val, col_name):
+            if not np.issubdtype(type(val), np.number):
+                return ""
+            mean_val = means[col_name]
+            if val < mean_val:
+                intensity = min(1, abs(val - mean_val) / mean_val)
+                return f"background-color: rgba(255,0,0,{intensity})"
+            elif val > mean_val:
+                intensity = min(1, abs(val - mean_val) / mean_val)
+                return f"background-color: rgba(0,255,0,{intensity})"
             else:
                 return ""
 
-        # Apply coloring relative to index average
-        means = df_display.mean(numeric_only=True)
-        styled_df = df_avg_display.apply(lambda x: [color_scale(v, means[col]) if pd.api.types.is_number(v) else '' 
-                                                                          for col,v in zip(df_avg_display.columns, x)], axis=1)
+        # Apply coloring only to numeric columns
+        for col in numeric_cols:
+            styled_df = styled_df.applymap(lambda v: color_cells(v, col), subset=[col])
 
         st.subheader("Fundamentals with Index Average")
         st.dataframe(styled_df)
