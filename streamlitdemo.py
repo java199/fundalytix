@@ -85,7 +85,7 @@ with col1:
     index_choice = st.selectbox("Select Index", list(INDEX_OPTIONS))
 
 with col2:
-    ref_date = st.date_input("Reference date", value=datetime.today().date(), options=available_dates["dt"].tolist())
+    ref_date = st.selectbox("Reference date", available_dates)
 
 st.write(f"Using reference date: {ref_date}")
 
