@@ -153,7 +153,7 @@ if st.button("Load Fundamentals"):
 
         # Apply coloring relative to index average
         means = df_display.mean(numeric_only=True)
-        styled_df = df_avg_display.style.format("{:.2f}x").apply(lambda x: [color_scale(v, means[col]) if pd.api.types.is_number(v) else '' 
+        styled_df = df_avg_display.apply(lambda x: [color_scale(v, means[col]) if pd.api.types.is_number(v) else '' 
                                                                           for col,v in zip(df_avg_display.columns, x)], axis=1)
 
         st.subheader("Fundamentals with Index Average")
