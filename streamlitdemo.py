@@ -130,38 +130,38 @@ if st.button("Load Fundamentals"):
         st.subheader("Individual Stock Fundamentals")
         st.dataframe(df_display, use_container_width=True)
 
-        # --- Compute Index Average ---
-        avg_row = df_display.mean(numeric_only=True).to_frame().T
-        avg_row.insert(0, "ticker", "Index Average")
+        # # --- Compute Index Average ---
+        # avg_row = df_display.mean(numeric_only=True).to_frame().T
+        # avg_row.insert(0, "ticker", "Index Average")
 
-        # Append index average row
-        df_avg_display = pd.concat([df_display, avg_row], ignore_index=True)
+        # # Append index average row
+        # df_avg_display = pd.concat([df_display, avg_row], ignore_index=True)
 
-        # Identify numeric columns
-        numeric_cols = df_avg_display.select_dtypes(include=np.number).columns
+        # # Identify numeric columns
+        # numeric_cols = df_avg_display.select_dtypes(include=np.number).columns
 
-        # Format only numeric columns in X-notation
-        styled_df = df_avg_display.style.format({col: "{:.2f}x" for col in numeric_cols})
+        # # Format only numeric columns in X-notation
+        # styled_df = df_avg_display.style.format({col: "{:.2f}x" for col in x_notation_cols})
 
-        # Function to color cells relative to column mean
-        means = df_display.mean(numeric_only=True)
-        def color_cells(val, col_name):
-            if not np.issubdtype(type(val), np.number):
-                return ""
-            mean_val = means[col_name]
-            if val < mean_val:
-                intensity = min(1, abs(val - mean_val) / mean_val)
-                return f"background-color: rgba(255,0,0,{intensity})"
-            elif val > mean_val:
-                intensity = min(1, abs(val - mean_val) / mean_val)
-                return f"background-color: rgba(0,255,0,{intensity})"
-            else:
-                return ""
+        # # Function to color cells relative to column mean
+        # means = df_display.mean(numeric_only=True)
+        # def color_cells(val, col_name):
+        #     if not np.issubdtype(type(val), np.number):
+        #         return ""
+        #     mean_val = means[col_name]
+        #     if val < mean_val:
+        #         intensity = min(1, abs(val - mean_val) / mean_val)
+        #         return f"background-color: rgba(255,0,0,{intensity})"
+        #     elif val > mean_val:
+        #         intensity = min(1, abs(val - mean_val) / mean_val)
+        #         return f"background-color: rgba(0,255,0,{intensity})"
+        #     else:
+        #         return ""
 
-        # Apply coloring only to numeric columns
-        for col in numeric_cols:
-            styled_df = styled_df.applymap(lambda v: color_cells(v, col), subset=[col])
+        # # Apply coloring only to numeric columns
+        # for col in numeric_cols:
+        #     styled_df = styled_df.applymap(lambda v: color_cells(v, col), subset=[col])
 
-        st.subheader("Fundamentals with Index Average")
-        st.dataframe(styled_df)
+        # st.subheader("Fundamentals with Index Average")
+        # st.dataframe(styled_df)
         st.caption(f"Data as of {ref_date} (latest available from Yahoo Finance)")
