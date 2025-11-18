@@ -25,33 +25,31 @@ def load_stocks(index_list):
     return df
 
 @st.cache_data(ttl=300)  # cache for 5 minutes
-def get_index_list(ref_date: datetime.date, index_name) -> pd.DataFrame:
+def get_index_list(ref_date: str, index_name) -> pd.DataFrame:
     # supabase expects ISO date strings for filtering
-    ref_date_str = ref_date.isoformat()
     resp = (
         supabase
         .table("constituents_history")
         .select("ticker")
         .eq("index", index_name)
-        .gte("included_start", ref_date_str)
-        .lte("included_end", ref_date_str)
+        .gte("included_start", ref_date)
+        .lte("included_end", ref_date)
         .distinct()
         .execute()
     )
     return pd.DataFrame(resp.data)
 
 @st.cache_data(ttl=300)  # cache for 5 minutes
-def load_fundamentals_for_date(ref_date: datetime.date, index_name) -> pd.DataFrame:
+def load_fundamentals_for_date(ref_date, index_name) -> pd.DataFrame:
     index_list = get_index_list(ref_date, index_name)["ticker"].tolist()
     stocks = load_stocks(index_list)["ticker"].tolist()
     
     # supabase expects ISO date strings for filtering
-    ref_date_str = ref_date.isoformat()
     resp = (
         supabase
         .table("fundamentals_daily")
         .select("*")
-        .eq("dt", ref_date_str)
+        .eq("dt", ref_date)
         .in_("ticker", stocks)
         .execute()
     )
