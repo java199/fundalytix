@@ -115,8 +115,8 @@ if st.button("Load Fundamentals"):
         }, inplace=True)
 
         # Convert performance columns to X-notation
-        x_notation_cols = ["Revenue 1Y", "Revenue 5Y", "Earnings 1Y", "Earnings 5Y"]
-        percentage_cols = ["1M Perf","3M Perf","6M Perf","1Y Perf","3Y Perf","5Y Perf"]
+        x_notation_cols = ["Revenue 1Y (X)", "Revenue 5Y (X)", "Earnings 1Y (X)", "Earnings 5Y (X)"]
+        percentage_cols = ["1M Perf (%)","3M Perf (%)","6M Perf (%)","1Y Perf (%)","3Y Perf (%)","5Y Perf (%)"]
 
         for col in percentage_cols:
             df_display[col] = (df_display[col] * 100).round(2)  # e.g., 0.1234 → 12.34%
